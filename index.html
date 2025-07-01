@@ -1,0 +1,322 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Modern Countdown Timer</title>
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            font-family: 'Arial', sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            color: white;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+            position: relative; /* For canvas positioning */
+        }
+
+        #waveCanvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: -1; /* Behind content */
+        }
+
+        .container {
+            text-align: center;
+            /* Removed box styling for a cleaner look */
+        }
+
+        #countdown {
+            font-size: 8em;
+            font-weight: bold;
+            margin-bottom: 30px;
+            letter-spacing: 5px;
+        }
+
+        #message {
+            font-size: 8em; /* Make message same size as countdown */
+            font-weight: bold;
+            opacity: 1;
+            transition: opacity 1s ease-out;
+            position: absolute; /* Position message over countdown */
+            width: 100%;
+            text-align: center;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+        }
+
+        #message.fade-out {
+            opacity: 0;
+        }
+
+        #message.hidden {
+            display: none;
+        }
+
+        .controls {
+            margin-top: 30px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            align-items: center;
+            opacity: 0;
+            max-height: 0;
+            overflow: hidden;
+            transition: opacity 0.5s ease-out, max-height 0.5s ease-out;
+        }
+
+        .controls.visible {
+            opacity: 1;
+            max-height: 500px; /* Sufficiently large to show all controls */
+        }
+
+        .controls input[type="number"],
+        .controls input[type="text"] {
+            padding: 12px 20px;
+            border-radius: 8px;
+            border: none;
+            background: rgba(255, 255, 255, 0.8);
+            color: #333;
+            font-size: 1.1em;
+            width: 80%;
+            max-width: 300px;
+            box-sizing: border-box;
+            outline: none;
+        }
+
+        .controls button {
+            background: #4CAF50;
+            color: white;
+            padding: 12px 25px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1.2em;
+            transition: background 0.3s ease, transform 0.2s ease;
+            width: 80%;
+            max-width: 200px;
+        }
+
+        .controls button:hover {
+            background: #45a049;
+            transform: translateY(-2px);
+        }
+
+        .controls button#stopButton {
+            background: #f44336;
+        }
+
+        .controls button#stopButton:hover {
+            background: #da190b;
+        }
+
+        .settings-cog {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            font-size: 2.5em;
+            cursor: pointer;
+            color: rgba(255, 255, 255, 0.7);
+            transition: color 0.3s ease;
+        }
+
+        .settings-cog:hover {
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="waveCanvas"></canvas>
+    <div class="settings-cog" id="settingsCog">
+        <i class="material-icons">settings</i>
+    </div>
+
+    <div class="container">
+        <div id="countdown">00:00</div>
+        <div id="message">Meeting will start soon!</div>
+
+        <div class="controls" id="controls">
+            <input type="text" id="timeInput" placeholder="MM:SS" value="5:00">
+            <input type="text" id="messageInput" placeholder="Message on finish" value="Get amongst it!">
+            <button id="startButton">Start Timer</button>
+            <button id="stopButton">Stop Timer</button>
+        </div>
+    </div>
+
+    <script>
+        // Gradient wave effect variables
+        const canvas = document.getElementById('waveCanvas');
+        const ctx = canvas.getContext('2d');
+        const colorPalette = [
+            [255, 154, 158], // #ff9a9e
+            [250, 208, 196], // #fad0c4
+            [178, 223, 219], // A light teal
+            [144, 202, 249]  // A light blue
+        ];
+        let gradientOffset = 0;
+        const gradientSpeed = 0.001; // Speed of the gradient movement (slower)
+        const colorTransitionSpeed = 0.005; // Speed of color transition
+
+        let currentColorIndex = 0;
+        let nextColorIndex = 1;
+        let colorTransitionProgress = 0;
+
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+
+        function lerpColor(color1, color2, factor) {
+            const result = color1.map((c, i) => Math.round(c + factor * (color2[i] - c)));
+            return `rgb(${result[0]}, ${result[1]}, ${result[2]})`;
+        }
+
+        function drawGradientWave() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            gradientOffset += gradientSpeed;
+            if (gradientOffset > 1) { // Reset offset after one full cycle
+                gradientOffset = 0;
+            }
+
+            colorTransitionProgress += colorTransitionSpeed;
+            if (colorTransitionProgress >= 1) {
+                colorTransitionProgress = 0;
+                currentColorIndex = nextColorIndex;
+                nextColorIndex = (nextColorIndex + 1) % colorPalette.length;
+            }
+
+            const color1 = lerpColor(colorPalette[currentColorIndex], colorPalette[nextColorIndex], colorTransitionProgress);
+            const color2 = lerpColor(colorPalette[nextColorIndex], colorPalette[(nextColorIndex + 1) % colorPalette.length], colorTransitionProgress);
+
+            // Create a linear gradient from bottom-right to top-left
+            const gradient = ctx.createLinearGradient(canvas.width, canvas.height, 0, 0);
+
+            // Adjust stop positions based on gradientOffset for the "wave" effect
+            gradient.addColorStop(Math.max(0, gradientOffset - 0.7), color1);
+            gradient.addColorStop(gradientOffset, color2);
+            gradient.addColorStop(Math.min(1, gradientOffset + 0.7), color1);
+
+
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            requestAnimationFrame(drawGradientWave);
+        }
+
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+        drawGradientWave();
+        const countdownDisplay = document.getElementById('countdown');
+        const messageDisplay = document.getElementById('message');
+        const timeInput = document.getElementById('timeInput');
+        const messageInput = document.getElementById('messageInput');
+        const startButton = document.getElementById('startButton');
+        const stopButton = document.getElementById('stopButton');
+        const settingsCog = document.getElementById('settingsCog');
+        const controlsDiv = document.getElementById('controls');
+
+        let countdownInterval;
+        let totalSeconds;
+        let isRunning = false;
+
+        function formatTime(seconds) {
+            const minutes = Math.floor(seconds / 60);
+            const remainingSeconds = seconds % 60;
+            return `${String(minutes).padStart(2, '0')}:${String(remainingSeconds).padStart(2, '0')}`;
+        }
+
+        function startCountdown() {
+            if (isRunning) return;
+
+            const timeString = timeInput.value;
+            const parts = timeString.split(':');
+            let minutes = 0;
+            let seconds = 0;
+
+            if (parts.length === 2) {
+                minutes = parseInt(parts[0]);
+                seconds = parseInt(parts[1]);
+            } else if (parts.length === 1) {
+                minutes = parseInt(parts[0]);
+            }
+
+            if (isNaN(minutes) || minutes < 0 || isNaN(seconds) || seconds < 0 || seconds >= 60) {
+                alert("Please enter time in MM:SS or MM format (e.g., 5:30 or 5).");
+                return;
+            }
+
+            totalSeconds = (minutes * 60) + seconds;
+            if (totalSeconds === 0) {
+                alert("Please enter a duration greater than 0.");
+                return;
+            }
+
+            isRunning = true;
+            countdownDisplay.style.display = 'block'; // Ensure countdown is visible
+            messageDisplay.classList.add('fade-out'); // Fade out message when timer starts
+            messageDisplay.classList.add('hidden'); // Hide message completely
+
+            // Auto-hide controls after 1.25 seconds
+            setTimeout(() => {
+                controlsDiv.classList.remove('visible');
+            }, 1250);
+
+            countdownInterval = setInterval(() => {
+                totalSeconds--;
+                countdownDisplay.textContent = formatTime(totalSeconds);
+
+                if (totalSeconds <= 0) {
+                    clearInterval(countdownInterval);
+                    countdownDisplay.style.display = 'none'; // Hide countdown
+                    messageDisplay.classList.remove('hidden'); // Show message
+                    messageDisplay.textContent = messageInput.value || "Time's up!";
+                    messageDisplay.classList.remove('fade-out'); // Ensure message is visible
+                    isRunning = false;
+                    // Controls remain hidden at the end of countdown
+                }
+            }, 1000);
+        }
+
+        function stopCountdown() {
+            clearInterval(countdownInterval);
+            isRunning = false;
+            countdownDisplay.style.display = 'block'; // Ensure countdown is visible
+            messageDisplay.classList.add('hidden'); // Hide message
+            messageDisplay.classList.remove('fade-out'); // Ensure message is not fading
+            messageDisplay.textContent = messageInput.value || "Timer Stopped."; // Display a stop message
+            countdownDisplay.textContent = formatTime(totalSeconds || 0); // Show current time or 00:00
+            // Controls remain hidden when timer is stopped manually
+        }
+
+        function toggleControls() {
+            controlsDiv.classList.toggle('visible');
+            // When controls are shown, ensure countdown is visible and message is hidden
+            if (controlsDiv.classList.contains('visible')) {
+                countdownDisplay.style.display = 'block';
+                messageDisplay.classList.add('hidden');
+                messageDisplay.classList.remove('fade-out');
+            }
+        }
+
+        startButton.addEventListener('click', startCountdown);
+        stopButton.addEventListener('click', stopCountdown);
+        settingsCog.addEventListener('click', toggleControls);
+
+        // Initial display
+        countdownDisplay.textContent = formatTime(parseInt(timeInput.value.split(':')[0]) * 60 + (timeInput.value.split(':').length > 1 ? parseInt(timeInput.value.split(':')[1]) : 0));
+        messageDisplay.textContent = messageInput.value;
+        messageDisplay.classList.add('hidden'); // Initially hide the message
+    </script>
+    </script>
+</body>
+</html>
